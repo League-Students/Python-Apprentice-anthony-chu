@@ -1,100 +1,202 @@
-"""
-# Meet_Tina.py
+import pygame
+import sys
 
-This program draws Tina: a turtle with a hexagon-shaped green shell, four brown legs, a head, and a tail.
+# Initialize Pygame
+pygame.init()
 
-There are two ways to run this program:
-1. Click the 'Run' (▶) button at the top of your editor window OR in the bottom left corner.
-2. Press the F5 key (in editors like VS Code, Thonny, or GitHub Codespaces).
+# Game Constants
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 400
+FPS = 60
+GRAVITY = 1.0
 
-You don't need to understand all of this yet. Later lessons will walk through it piece by piece.
-"""
+# Colors
+COLOR_BG = (51, 51, 51)
+COLOR_FLOOR = (85, 85, 85)
+COLOR_HP_BAR = (46, 204, 113)
+COLOR_HP_BG = (34, 34, 34)
+COLOR_TEXT = (255, 255, 255)
+COLOR_HITBOX = (241, 196, 15)
 
-import turtle                           # Tell Python we want to work with the turtle
-from math import radians, tan
+# Set up Display Window
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("League Brawler - Pygame Edition")
+clock = pygame.time.Clock()
+font = pygame.font.SysFont("Arial", 20, bold=True)
+game_over_font = pygame.font.SysFont("Arial", 40, bold=True)
 
-turtle.setup(600, 600, 0, 0)            # Set the size of the window
+class Fighter:
+    def __init__(self, x, y, color, controls):
+        # Position and Dimensions
+        self.rect = pygame.Rect(x, y, 40, 100)
+        self.color = color
+        self.controls = controls  # Dictionary mapping actions to keys
+        
+        # Physics Vectors
+        self.vx = 0
+        self.vy = 0
+        self.is_jumping = False
+        self.facing = 1  # 1 = Right, -1 = Left
+        
+        # Combat Stats
+        self.hp = 100
+        self.max_hp = 100
+        self.is_attacking = False
+        self.attack_cooldown = 0
+        self.hit_flash = 0
+        self.attack_rect = None
 
-tina = turtle.Turtle()                  # Create a turtle named tina
+    def handle_input(self, keys):
+        if self.hp <= 0:
+            return
 
-tina.speed('fastest')                   # Set the speed of the turtle to fastest
+        # Horizontal movement inputs
+        self.vx = 0
+        if keys[self.controls["left"]]:
+            self.vx = -5
+            self.facing = -1
+        if keys[self.controls["right"]]:
+            self.vx = 5
+            self.facing = 1
 
-# Draw the hexagon
-tina.penup()                            # Lift the pen up so we can move tina without drawing
-tina.goto(-100, 175)                    # Move tina to the starting position
-tina.pendown()
-tina.begin_fill()
+        # Jump input
+        if keys[self.controls["jump"]] and not self.is_jumping:
+            self.vy = -18
+            self.is_jumping = True
 
-def head_pos(l=200):
-    """ Position of tina's head, relative to the center of the screen"""
-    return (l/2) / tan(radians(30))
+        # Attack input trigger
+        if keys[self.controls["attack"]] and self.attack_cooldown == 0:
+            self.is_attacking = True
+            self.attack_cooldown = 20  # Frames total for the move
+            
+            # Create a localized attack hitbox based on facing direction
+            reach = 40
+            if self.facing == 1:
+                self.attack_rect = pygame.Rect(self.rect.right, self.rect.top + 30, reach, 20)
+            else:
+                self.attack_rect = pygame.Rect(self.rect.left - reach, self.rect.top + 30, reach, 20)
 
-def draw_body(t, l=200):
-    """Draw the body of the turtle"""
-    t.pencolor('green')                  # Set the pen color to green
-    t.fillcolor('green')                 # Set the fill color to green
-    t.penup()
-    t.goto(0,0)                          # Move tina to the center of the screen
-    t.setheading(-90)                    # Set the heading of tina to -90 degrees
-    t.forward(head_pos(l))               # Move tina forward by the head position
-    t.right(90)                          # Turn tina right by 90 degrees
-    t.backward( l/2 )                    # Move tina backward by half the length
-    t.pendown()
-    t.begin_fill()
-    for _ in range(6):
-        t.forward(l)                     # Move tina forward by the length
-        t.right(60)                      # Turn tina right by 60 degrees
-    t.end_fill()
+    def update_physics(self, floor_y):
+        # Flash timer logic
+        if self.hit_flash > 0:
+            self.hit_flash -= 1
 
-def draw_leg(t, a, r=170, w=40, l=50):
-    """Draw A Leg"""
-    t.penup()
-    t.goto(0, 0)                         # Move tina to the center of the screen
-    t.setheading(a)                      # Set the heading of tina to the angle
-    t.forward(r)                         # Move tina forward by the radius
-    t.pendown()
-    t.pencolor('brown')                  # Set the pen color to brown
-    t.fillcolor('brown')                 # Set the fill color to brown
-    t.begin_fill()
-    t.left(90)                           # Turn tina left by 90 degrees
-    t.forward(w/2)                       # Move tina forward by half the width
-    t.right(90)                          # Turn tina right by 90 degrees
-    t.forward(l)                         # Move tina forward by the length
-    t.right(90)                          # Turn tina right by 90 degrees
-    t.forward(w)                         # Move tina forward by the width
-    t.right(90)                          # Turn tina right by 90 degrees
-    t.forward(l)                         # Move tina forward by the length
-    t.right(90)                          # Turn tina right by 90 degrees
-    t.forward(w/2)                       # Move tina forward by half the width
-    t.end_fill()
+        # Cooldown timer logic
+        if self.attack_cooldown > 0:
+            self.attack_cooldown -= 1
+            # Hide the attack hitbox halfway through the cooldown animation
+            if self.attack_cooldown < 10:
+                self.is_attacking = False
+                self.attack_rect = None
 
-def draw_head(t):
-    """Draw a brown head at the head position"""
-    t.penup()
-    t.goto(0, head_pos()-20)             # Move tina to the head position
-    t.pendown()
-    t.pencolor('brown')                  # Set the pen color to brown
-    t.fillcolor('brown')                 # Set the fill color to brown
-    t.begin_fill()
-    t.circle(50)                         # Draw a circle with radius 50
-    t.end_fill()
+        if self.hp <= 0:
+            return
 
-def say_hello(t):
-    """Make tina say hello, with text to the right of her head"""
-    t.penup()
-    t.goto(75, head_pos()+75)            # Move tina to the position for the text
-    t.pendown()
-    t.write("Hello! I'm Tina!", font=("Arial", 20, "normal"))  # Write the text
+        # Apply movements and gravity simulations
+        self.rect.x += self.vx
+        self.vy += GRAVITY
+        self.rect.y += self.vy
 
-draw_head(tina)
+        # Left/Right screen boundary boundaries
+        if self.rect.left < 0:
+            self.rect.left = 0
+        if self.rect.right > SCREEN_WIDTH:
+            self.rect.right = SCREEN_WIDTH
 
-for lp in (30, -30, -150, 150):
-    draw_leg(tina, lp)                   # Draw the legs at the specified angles
+        # Floor collision check
+        if self.rect.bottom >= floor_y:
+            self.rect.bottom = floor_y
+            self.vy = 0
+            self.is_jumping = False
 
-draw_leg(tina, -90, r=170, w=10, l=50)   # This one is actually a tail!
+    def check_hit(self, target):
+        # Collision detection evaluation using standard rect intersections
+        if self.is_attacking and self.attack_rect and target.hp > 0:
+            if self.attack_rect.colliderect(target.rect):
+                target.hp = max(0, target.hp - 10)
+                target.hit_flash = 5
+                # Deselect active attack to prevent multi-hit frames
+                self.is_attacking = False
+                self.attack_rect = None
 
-draw_body(tina)                          # Draw the body of the turtle
+    def draw(self, surface):
+        # Swap fill color to white during an active damage frame
+        current_color = (255, 255, 255) if self.hit_flash > 0 else self.color
+        pygame.draw.rect(surface, current_color, self.rect)
+        pygame.draw.rect(surface, (255, 255, 255), self.rect, 1)  # Character border
 
-say_hello(tina)                          # Make tina say hello
+        # Draw the weapon hitbox layer
+        if self.is_attacking and self.attack_rect:
+            pygame.draw.rect(surface, COLOR_HITBOX, self.attack_rect)
 
-turtle.exitonclick()                     # Close the window when we click on it
+
+def draw_hud(player1, player2):
+    # Text labels
+    p1_label = font.render("PLAYER 1 (A/D/W + F)", True, COLOR_TEXT)
+    p2_label = font.render("PLAYER 2 (ARROWS + M)", True, COLOR_TEXT)
+    screen.blit(p1_label, (50, 15))
+    screen.blit(p2_label, (550, 15))
+
+    # P1 Health bar rendering configurations
+    pygame.draw.rect(screen, COLOR_HP_BG, (50, 40, 200, 20))
+    p1_hp_width = int((player1.hp / player1.max_hp) * 200)
+    pygame.draw.rect(screen, COLOR_HP_BAR, (50, 40, p1_hp_width, 20))
+
+    # P2 Health bar rendering configurations
+    pygame.draw.rect(screen, COLOR_HP_BG, (550, 40, 200, 20))
+    p2_hp_width = int((player2.hp / player2.max_hp) * 200)
+    pygame.draw.rect(screen, COLOR_HP_BAR, (750 - p2_hp_width, 40, p2_hp_width, 20))
+
+
+# Define Keyboard mappings
+p1_keys = {"left": pygame.K_a, "right": pygame.K_d, "jump": pygame.K_w, "attack": pygame.K_f}
+p2_keys = {"left": pygame.K_LEFT, "right": pygame.K_RIGHT, "jump": pygame.K_UP, "attack": pygame.K_m}
+
+# Instantiate OOP Fighters
+p1 = Fighter(150, 250, (52, 152, 219), p1_keys)  # Blue Fighter
+p2 = Fighter(610, 250, (231, 76, 60), p2_keys)   # Red Fighter
+
+# Main Loop Execution Block
+floor_y = 350
+running = True
+
+while running:
+    clock.tick(FPS)
+    
+    # 1. Event Handling Layer
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+    # 2. Logic Update Layer
+    keys = pygame.key.get_pressed()
+    p1.handle_input(keys)
+    p2.handle_input(keys)
+
+    p1.update_physics(floor_y)
+    p2.update_physics(floor_y)
+
+    # Cross-reference attack hitboxes with targets
+    p1.check_hit(p2)
+    p2.check_hit(p1)
+
+    # 3. Drawing / Rendering Layer
+    screen.fill(COLOR_BG)
+    pygame.draw.rect(screen, COLOR_FLOOR, (0, floor_y, SCREEN_WIDTH, SCREEN_HEIGHT - floor_y))
+
+    p1.draw(screen)
+    p2.draw(screen)
+    draw_hud(p1, p2)
+
+    # Win state evaluation overlay 
+    if p1.hp <= 0:
+        game_over_surface = game_over_font.render("PLAYER 2 WINS!", True, (241, 196, 15))
+        screen.blit(game_over_surface, (SCREEN_WIDTH // 2 - 140, SCREEN_HEIGHT // 2 - 20))
+    elif p2.hp <= 0:
+        game_over_surface = game_over_font.render("PLAYER 1 WINS!", True, (241, 196, 15))
+        screen.blit(game_over_surface, (SCREEN_WIDTH // 2 - 140, SCREEN_HEIGHT // 2 - 20))
+
+    pygame.display.flip()
+
+pygame.quit()
+sys.exit()
