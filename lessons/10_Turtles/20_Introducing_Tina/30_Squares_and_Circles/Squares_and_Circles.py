@@ -1,72 +1,206 @@
-"""
-# Squares_and_Circles.py
+import pygame
+import sys
 
-This Turtle program demonstrates basic drawing and text output in Python.
-It draws a colored square, places a filled circle inside it, and writes a message on the screen.
-Lines starting with # are single-line comments, used to describe what each part of the code does.
-Text enclosed in triple quotes (like this) is a docstring, which provides a multi-line explanation at the top of the file.
+# Initialize Pygame
+pygame.init()
 
-Review each section to see how the turtle is moved, how shapes are drawn, and how text is displayed.
-"""
+# Game Constants
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 400
+FPS = 60
+GRAVITY = 1.0
 
-import turtle                           # Tell Python we want to work with the turtle
-turtle.setup(600, 600, 0, 0)            # Set the size of the window
+# Colors
+COLOR_BG = (51, 51, 51)
+COLOR_FLOOR = (85, 85, 85)
+COLOR_HP_BAR = (46, 204, 113)
+COLOR_HP_BG = (34, 34, 34)
+COLOR_TEXT = (255, 255, 255)
+COLOR_HITBOX = (241, 196, 15)
 
-tina = turtle.Turtle()                  # Create a turtle named tina
+# Set up Display Window
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("League Brawler - Knockback Edition")
+clock = pygame.time.Clock()
+font = pygame.font.SysFont("Arial", 20, bold=True)
+game_over_font = pygame.font.SysFont("Arial", 40, bold=True)
 
-tina.shape('turtle')                    # Set the shape of the turtle to a turtle
-tina.speed(2)                           # Move at a moderate speed, not too fast.
+class Fighter:
+    def __init__(self, x, y, color, controls):
+        # Position and Dimensions
+        self.rect = pygame.Rect(x, y, 40, 100)
+        self.color = color
+        self.controls = controls  
+        
+        # Physics Vectors
+        self.vx = 0
+        self.vy = 0
+        self.knockback_vx = 0  # Added for knockback velocity tracker
+        self.is_jumping = False
+        self.facing = 1  # 1 = Right, -1 = Left
+        
+        # Combat Stats
+        self.hp = 100
+        self.max_hp = 100
+        self.is_attacking = False
+        self.attack_cooldown = 0
+        self.hit_flash = 0
+        self.attack_rect = None
 
-##
-## Move Tina to the Starting Position
-##
+    def handle_input(self, keys):
+        if self.hp <= 0:
+            return
 
-tina.penup()                            # Lift the pen up so we can move tina without drawing
-tina.goto(-100, 100)                    # Move tina to the starting position
-tina.pendown()                          # Put the pen down so we can draw
+        # Horizontal movement inputs (only allowed if not experiencing heavy knockback)
+        self.vx = 0
+        if abs(self.knockback_vx) < 2:
+            if keys[self.controls["left"]]:
+                self.vx = -5
+                self.facing = -1
+            if keys[self.controls["right"]]:
+                self.vx = 5
+                self.facing = 1
 
-##
-## Draw a Square
-## Repeat forward + right three more times to complete the square.
-##
+            # Jump input
+            if keys[self.controls["jump"]] and not self.is_jumping:
+                self.vy = -18
+                self.is_jumping = True
 
-tina.pencolor('blue')                   # Set the pen color to blue
-tina.forward(200)                       # Move tina forward by the forward distance
-tina.right(90)                          # Turn tina right by 90 degrees
+        # Attack input trigger
+        if keys[self.controls["attack"]] and self.attack_cooldown == 0 and abs(self.knockback_vx) < 3:
+            self.is_attacking = True
+            self.attack_cooldown = 20  
+            
+            # Create an attack hitbox
+            reach = 40
+            if self.facing == 1:
+                self.attack_rect = pygame.Rect(self.rect.right, self.rect.top + 30, reach, 20)
+            else:
+                self.attack_rect = pygame.Rect(self.rect.left - reach, self.rect.top + 30, reach, 20)
 
-tina.pencolor('red')                    # Set the pen color to red
-tina.forward(200)
-tina.right(90)
+    def update_physics(self, floor_y):
+        # Flash timer logic
+        if self.hit_flash > 0:
+            self.hit_flash -= 1
 
-tina.pencolor('green')                  # Set the pen color to green
-tina.forward(200)
-tina.right(90)
+        # Cooldown timer logic
+        if self.attack_cooldown > 0:
+            self.attack_cooldown -= 1
+            if self.attack_cooldown < 10:
+                self.is_attacking = False
+                self.attack_rect = None
 
-tina.pencolor('purple')                 # Set the pen color to purple
-tina.forward(200)
-tina.right(90)
+        if self.hp <= 0:
+            return
 
-##
-## Draw a Circle
-##
+        # Apply standard movement velocity combined with knockback forces
+        self.rect.x += (self.vx + self.knockback_vx)
+        self.vy += GRAVITY
+        self.rect.y += self.vy
 
-tina.penup()
-tina.goto(0, -75)
-tina.pendown()
+        # Apply friction to the knockback vector so it decays smoothly over time
+        if self.knockback_vx > 0:
+            self.knockback_vx -= 0.5
+            if self.knockback_vx < 0: self.knockback_vx = 0
+        elif self.knockback_vx < 0:
+            self.knockback_vx += 0.5
+            if self.knockback_vx > 0: self.knockback_vx = 0
 
-tina.color('red')                       # Set the color of tina to red
-tina.begin_fill()
-tina.circle(75)
-tina.end_fill()
+        # Screen boundaries
+        if self.rect.left < 0:
+            self.rect.left = 0
+            self.knockback_vx = 0  # Stop momentum if hitting a wall
+        if self.rect.right > SCREEN_WIDTH:
+            self.rect.right = SCREEN_WIDTH
+            self.knockback_vx = 0  # Stop momentum if hitting a wall
 
-##
-## Write a Message
-##
+        # Floor collision check
+        if self.rect.bottom >= floor_y:
+            self.rect.bottom = floor_y
+            self.vy = 0
+            self.is_jumping = False
 
-tina.penup()                            # Lift the pen up so we can move tina without drawing
-tina.goto(-30, -130)                    # Move to where the text should appear
-tina.write("Why, hello there!")         # Write the message "Why, hello there!"
+    def check_hit(self, target):
+        if self.is_attacking and self.attack_rect and target.hp > 0:
+            if self.attack_rect.colliderect(target.rect):
+                target.hp = max(0, target.hp - 10)
+                target.hit_flash = 5
+                
+                # Apply knockback vector relative to attacker's current facing direction
+                # A facing value of 1 pushes target right (+12), -1 pushes target left (-12)
+                target.knockback_vx = self.facing * 12
+                
+                # Cancel the active hitbox frame to prevent multiple hits instantly
+                self.is_attacking = False
+                self.attack_rect = None
 
-turtle.exitonclick()                    # Close the window when we click on it
+    def draw(self, surface):
+        current_color = (255, 255, 255) if self.hit_flash > 0 else self.color
+        pygame.draw.rect(surface, current_color, self.rect)
+        pygame.draw.rect(surface, (255, 255, 255), self.rect, 1)  
 
-# Nice work. Save your progress in the next lesson, 40_Check_In_Your_Code.ipynb
+        if self.is_attacking and self.attack_rect:
+            pygame.draw.rect(surface, COLOR_HITBOX, self.attack_rect)
+
+
+def draw_hud(player1, player2):
+    p1_label = font.render("PLAYER 1 (A/D/W + F)", True, COLOR_TEXT)
+    p2_label = font.render("PLAYER 2 (ARROWS + M)", True, COLOR_TEXT)
+    screen.blit(p1_label, (50, 15))
+    screen.blit(p2_label, (550, 15))
+
+    pygame.draw.rect(screen, COLOR_HP_BG, (50, 40, 200, 20))
+    p1_hp_width = int((player1.hp / player1.max_hp) * 200)
+    pygame.draw.rect(screen, COLOR_HP_BAR, (50, 40, p1_hp_width, 20))
+
+    pygame.draw.rect(screen, COLOR_HP_BG, (550, 40, 200, 20))
+    p2_hp_width = int((player2.hp / player2.max_hp) * 200)
+    pygame.draw.rect(screen, COLOR_HP_BAR, (750 - p2_hp_width, 40, p2_hp_width, 20))
+
+
+# Keyboard mappings
+p1_keys = {"left": pygame.K_a, "right": pygame.K_d, "jump": pygame.K_w, "attack": pygame.K_f}
+p2_keys = {"left": pygame.K_LEFT, "right": pygame.K_RIGHT, "jump": pygame.K_UP, "attack": pygame.K_m}
+
+# Instantiate Fighters
+p1 = Fighter(150, 250, (52, 152, 219), p1_keys)  
+p2 = Fighter(610, 250, (231, 76, 60), p2_keys)   
+
+floor_y = 350
+running = True
+
+while running:
+    clock.tick(FPS)
+    
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+    keys = pygame.key.get_pressed()
+    p1.handle_input(keys)
+    p2.handle_input(keys)
+
+    p1.update_physics(floor_y)
+    p2.update_physics(floor_y)
+
+    p1.check_hit(p2)
+    p2.check_hit(p1)
+
+    screen.fill(COLOR_BG)
+    pygame.draw.rect(screen, COLOR_FLOOR, (0, floor_y, SCREEN_WIDTH, SCREEN_HEIGHT - floor_y))
+
+    p1.draw(screen)
+    p2.draw(screen)
+    draw_hud(p1, p2)
+
+    if p1.hp <= 0:
+        game_over_surface = game_over_font.render("PLAYER 2 WINS!", True, (241, 196, 15))
+        screen.blit(game_over_surface, (SCREEN_WIDTH // 2 - 140, SCREEN_HEIGHT // 2 - 20))
+    elif p2.hp <= 0:
+        game_over_surface = game_over_font.render("PLAYER 1 WINS!", True, (241, 196, 15))
+        screen.blit(game_over_surface, (SCREEN_WIDTH // 2 - 140, SCREEN_HEIGHT // 2 - 20))
+
+    pygame.display.flip()
+
+pygame.quit()
+sys.exit()
